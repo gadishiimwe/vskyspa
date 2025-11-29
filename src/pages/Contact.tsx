@@ -10,8 +10,10 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import SEO from "@/components/SEO";
 import { pageSEO, faqContent } from "@/seo/seoConfig";
+import { useTranslation } from "react-i18next";
 
 const Contact = () => {
+  const { t } = useTranslation();
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     toast.success("Message sent! We'll get back to you soon.");
@@ -20,23 +22,23 @@ const Contact = () => {
   const contactInfo = [
     {
       icon: Phone,
-      title: "Phone",
-      details: ["+250 781 262 272 / +250 796 584 614", "Available 10 AM - 10 PM"],
+      title: t("contact.info.phone"),
+      details: [t("contact.info.phone.details1"), t("contact.info.phone.details2")],
     },
     {
       icon: Mail,
-      title: "Email",
-      details: ["vskyyspa@gmail.com"],
+      title: t("contact.info.email"),
+      details: [t("contact.info.email.details")],
     },
     {
       icon: MapPin,
-      title: "Address",
-      details: ["Kibagabaga", "Kigali, Rwanda"],
+      title: t("contact.info.address"),
+      details: [t("contact.info.address.details1"), t("contact.info.address.details2")],
     },
     {
       icon: Clock,
-      title: "Hours",
-      details: ["Mon-Fri: 10 AM - 10 PM", "Sat-Sun: 9 AM - 10 PM"],
+      title: t("contact.info.hours"),
+      details: [t("contact.info.hours.details1"), t("contact.info.hours.details2")],
     },
   ];
 
@@ -128,7 +130,7 @@ const Contact = () => {
             {/* Contact Form */}
             <Card className="border-none shadow-soft bg-card/95 backdrop-blur" aria-label="Contact form">
               <CardHeader>
-                <CardTitle className="text-2xl">Send Us a Message</CardTitle>
+                <CardTitle className="text-2xl">{t("contact.form.title")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -193,27 +195,27 @@ const Contact = () => {
       <section className="py-20 bg-muted/30" aria-labelledby="contact-faq-heading">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 id="contact-faq-heading" className="text-4xl font-bold mb-4">Frequently Asked Questions</h2>
-            <p className="text-muted-foreground">Quick answers about our spa in Kigali, wellness Rwanda programs, and bookings.</p>
+            <h2 id="contact-faq-heading" className="text-4xl font-bold mb-4">{t("contact.faq.title")}</h2>
+            <p className="text-muted-foreground">{t("contact.faq.subtitle")}</p>
           </div>
 
           <div className="max-w-3xl mx-auto space-y-4">
             {[
               {
-                q: "How do I book an appointment?",
-                a: "You can book online through our booking page, call us, or send an email. We'll confirm your appointment within 24 hours.",
+                q: t("contact.faq.q1"),
+                a: t("contact.faq.a1"),
               },
               {
-                q: "What is your cancellation policy?",
-                a: "We require 24 hours notice for cancellations. Cancellations within 24 hours may incur a fee.",
+                q: t("contact.faq.q2"),
+                a: t("contact.faq.a2"),
               },
               {
-                q: "Do you offer gift certificates?",
-                a: "Yes! Gift certificates are available for any amount or specific service. Perfect for any occasion.",
+                q: t("contact.faq.q3"),
+                a: t("contact.faq.a3"),
               },
               {
-                q: "What should I bring to my appointment?",
-                a: "Just bring yourself! We provide robes, slippers, and all necessary amenities.",
+                q: t("contact.faq.q4"),
+                a: t("contact.faq.a4"),
               },
             ].map((faq, index) => (
               <Card key={index} className="border-none shadow-soft">
@@ -235,27 +237,25 @@ const Contact = () => {
         <div className="absolute inset-0 sparkle opacity-20" />
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-4xl mx-auto">
-            <h2 id="visit-heading" className="text-4xl font-bold text-center mb-8 text-gradient-rose">🌸 Visit V&SKY SPA 🌸</h2>
+            <h2 id="visit-heading" className="text-4xl font-bold text-center mb-8 text-gradient-rose">{t("contact.visit.title")}</h2>
             <div className="grid md:grid-cols-2 gap-8 mb-8">
               <div>
-                <h3 className="text-2xl font-bold mb-4">Our Location</h3>
+                <h3 className="text-2xl font-bold mb-4">{t("contact.visit.location.title")}</h3>
                 <p className="text-muted-foreground mb-4">
-                  Conveniently located in Kibagabaga, one of Kigali's most accessible neighborhoods.
-                  We offer ample parking, easy access to public transportation, and concierge assistance for corporate wellness Kigali groups.
+                  {t("contact.visit.location.description")}
                 </p>
                 <p className="text-muted-foreground">
-                  <strong>Address:</strong><br />
-                  Kibagabaga<br />
-                  Kigali, Rwanda
+                  <strong>{t("contact.visit.address.line1")}</strong><br />
+                  {t("contact.visit.address.line2")}
                 </p>
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-4">Operating Hours</h3>
+                <h3 className="text-2xl font-bold mb-4">{t("contact.visit.hours.title")}</h3>
                 <div className="space-y-2 text-muted-foreground">
-                  <p><strong>Monday - Friday:</strong> 9:00 AM - 8:00 PM</p>
-                  <p><strong>Saturday - Sunday:</strong> 10:00 AM - 6:00 PM</p>
+                  <p><strong>{t("contact.visit.hours.weekdays")}</strong></p>
+                  <p><strong>{t("contact.visit.hours.weekends")}</strong></p>
                   <p className="mt-4 text-sm">
-                    <em>We recommend booking in advance to secure your preferred time slot, especially during weekends and holidays.</em>
+                    <em>{t("contact.visit.hours.note")}</em>
                   </p>
                 </div>
               </div>
@@ -263,7 +263,7 @@ const Contact = () => {
             <div className="text-center">
               <Link to="/booking">
                 <Button variant="hero" size="lg" className="animate-bounce" aria-label="Book Kigali spa appointment">
-                  Book Your Appointment
+                  {t("contact.visit.book")}
                 </Button>
               </Link>
             </div>

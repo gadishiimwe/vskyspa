@@ -16,7 +16,6 @@ import wellnessTreatment from "@/assets/wellness-treatment.jpg";
 const HeroSection = () => {
   const { t } = useTranslation();
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState<Record<number, boolean>>({});
 
   const slides = [
@@ -94,19 +93,6 @@ const HeroSection = () => {
     setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
-  if (isLoading) {
-    return (
-      <section className="relative h-screen mt-[64px] md:mt-[116px] overflow-hidden bg-gradient-to-br from-primary/20 via-background to-primary/10">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-primary text-xl font-semibold">V&SKY SPA, just for you…</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="relative h-screen mt-[116px] overflow-hidden" aria-label="V&SKY SPA Kigali hero banner">
       {/* Slides */}
@@ -125,11 +111,6 @@ const HeroSection = () => {
               backgroundPosition: index === 1 ? 'right center' : 'center center'
             }}
           >
-            {!imagesLoaded[index] && (
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-background to-primary/10 flex items-center justify-center">
-                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
             <div className={`absolute inset-0 ${index === 0 ? 'bg-black/60' : 'bg-black/20'}`} />
           </div>
 

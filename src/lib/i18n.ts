@@ -216,6 +216,7 @@ const resources = {
       "services.coffee-services.title": "Coffee Services",
       "services.coffee-services.description": "Premium coffee selection expertly brewed to complement your spa experience.",
       "services.learnMore": "Learn More",
+      "services.treatments.include": "Treatments Include:",
 
       // Services Section
       "services.section.header": "Our Services",
@@ -236,10 +237,10 @@ const resources = {
 
       // About Page
       "about.hero.title": "About V&SKY SPA Kigali",
-      "about.hero.subtitle": "Your trusted luxury spa Rwanda partner for holistic healing Rwanda experiences since 2013.",
+      "about.hero.subtitle": "Your trusted luxury spa Rwanda partner for holistic healing Rwanda experiences since 2020.",
       "about.story.title": "Our Story",
       "about.story.subtitle": "A Decade of Excellence",
-      "about.story.description1": "Founded in 2013, V&SKY SPA has been at the forefront of luxury spa and beauty services in Kigali, Rwanda. What started as a small boutique spa has grown into a premier wellness destination, serving thousands of satisfied clients with our signature services: therapeutic massage, professional hair care (Made Hair), and natural green plant therapies.",
+      "about.story.description1": "Founded in 2020, V&SKY SPA has been at the forefront of luxury spa and beauty services in Kigali, Rwanda. What started as a small boutique spa has grown into a premier wellness destination, serving thousands of satisfied clients with our signature services: therapeutic massage, professional hair care (Made Hair), and natural green plant therapies.",
       "about.story.description2": "Located in the heart of Kibagabaga, Kigali, our commitment to excellence, combined with state-of-the-art facilities and professional therapists Rwanda, has made us the go-to choice for those seeking a luxury day spa Kigali experience. As a signature spa Rwanda destination, we deliver massages, organic spa treatments Kigali, and holistic wellness services that feel tailored and elevated.",
       "about.story.cta": "Explore Our Services",
       "about.values.title": "Our Values",
@@ -425,8 +426,8 @@ const resources = {
       "contact.visit.address.line1": "Kibagabaga",
       "contact.visit.address.line2": "Kigali, Rwanda",
       "contact.visit.hours.title": "Operating Hours",
-      "contact.visit.hours.weekdays": "Monday - Friday: 9:00 AM - 8:00 PM",
-      "contact.visit.hours.weekends": "Saturday - Sunday: 10:00 AM - 6:00 PM",
+      "contact.visit.hours.weekdays": "Monday - Friday: 10:00 AM - 10:00 PM",
+      "contact.visit.hours.weekends": "Saturday - Sunday: 09:00 AM - 10:00 PM",
       "contact.visit.hours.note": "We recommend booking in advance to secure your preferred time slot, especially during weekends and holidays.",
       "contact.visit.book": "Book Your Appointment",
 
@@ -597,10 +598,10 @@ const resources = {
       "footer.phone": "电话",
       "footer.email": "电子邮件",
       "footer.hours": "营业时间",
-      "footer.hours.weekdays": "周一 - 周六：上午 9:00 - 下午 8:00",
-      "footer.hours.sunday": "周日：上午 10:00 - 下午 6:00",
+      "footer.hours.weekdays": "周一 - 周六：上午 09:00 - 下午 10:00",
+      "footer.hours.sunday": "周日：上午 10:00 - 下午 10:00",
       "footer.follow": "关注我们",
-      "footer.rights": "© 2024 V&SKY SPA 基加利。保留所有权利。",
+      "footer.rights": "© 2025 V&SKY SPA 基加利。保留所有权利。",
 
       // Services
       "services.body-massage.title": "身体按摩",
@@ -626,10 +627,10 @@ const resources = {
 
       // About Page
       "about.hero.title": "关于 V&SKY SPA 基加利",
-      "about.hero.subtitle": "自 2013 年以来，您值得信赖的豪华水疗卢旺达合作伙伴，提供整体愈合卢旺达体验。",
+      "about.hero.subtitle": "自 2020 年以来，您值得信赖的豪华水疗卢旺达合作伙伴，提供整体愈合卢旺达体验。",
       "about.story.title": "我们的故事",
       "about.story.subtitle": "卓越的十年",
-      "about.story.description1": "成立于 2013 年，V&SKY SPA 一直处于卢旺达基加利豪华水疗和美容服务的最前沿。从一家小型精品水疗中心开始，现已发展成为一流的养生目的地，为数千满意客户提供我们的标志性服务：治疗按摩、专业美发护理（Made Hair）和天然绿植疗法。",
+      "about.story.description1": "成立于 2020 年，V&SKY SPA 一直处于卢旺达基加利豪华水疗和美容服务的最前沿。从一家小型精品水疗中心开始，现已发展成为一流的养生目的地，为数千满意客户提供我们的标志性服务：治疗按摩、专业美发护理（Made Hair）和天然绿植疗法。",
       "about.story.description2": "位于基加利 Kibagabaga 中心，我们对卓越的承诺，加上最先进的设施和专业的卢旺达治疗师，使我们成为寻求豪华日间水疗基加利体验的人的首选。作为标志性水疗卢旺达目的地，我们提供按摩、有机水疗护理基加利和整体养生服务，感觉量身定制和提升。",
       "about.story.cta": "探索我们的服务",
       "about.values.title": "我们的价值观",
@@ -815,8 +816,8 @@ const resources = {
       "contact.visit.address.line1": "Kibagabaga",
       "contact.visit.address.line2": "基加利，卢旺达",
       "contact.visit.hours.title": "营业时间",
-      "contact.visit.hours.weekdays": "周一 - 周五：上午 9:00 - 下午 8:00",
-      "contact.visit.hours.weekends": "周六 - 周日：上午 10:00 - 下午 6:00",
+      "contact.visit.hours.weekdays": "周一 - 周五：上午 09:00 - 下午 10:00",
+      "contact.visit.hours.weekends": "周六 - 周日：上午 10:00 - 下午 10:00",
       "contact.visit.hours.note": "我们建议提前预约以确保您的首选时间段，尤其是在周末和假期。",
       "contact.visit.book": "预约您的预约",
 

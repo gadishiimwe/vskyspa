@@ -146,7 +146,7 @@ const Admin = () => {
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([])
   const [loadingBookings, setLoadingBookings] = useState(false)
   const [loadingBlockedSlots, setLoadingBlockedSlots] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('pending')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [bookingToDelete, setBookingToDelete] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -320,6 +320,9 @@ const Admin = () => {
         getApprovedBookings(),
         getDeclinedBookings()
       ])
+
+
+
       setPendingBookings(pending)
       setApprovedBookings(approved)
       setDeclinedBookings(declined)
@@ -364,6 +367,247 @@ const Admin = () => {
     }
   }
 
+  // Helper function to get service duration in minutes
+  const getServiceDuration = (serviceName: string): number => {
+    const match = serviceName.match(/\((\d+)\s*min\)/);
+    if (match) {
+      return parseInt(match[1]);
+    }
+    // Default duration for services without specified time (like coffee)
+    return 30; // 30 minutes default
+  };
+
+  // Helper function to calculate end time by adding duration to start time
+  const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const startTotalMinutes = startHour * 60 + startMinute;
+    const endTotalMinutes = startTotalMinutes + durationMinutes;
+    const endHour = Math.floor(endTotalMinutes / 60);
+    const endMinute = endTotalMinutes % 60;
+    return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+  };
+
+  // Function to group consecutive bookings into time ranges
+  const groupBookingsIntoRanges = (bookings: Booking[]): Array<{startTime: string, endTime: string, service: string, clientName: string, date: string, people: number}> => {
+    const ranges: Array<{startTime: string, endTime: string, service: string, clientName: string, date: string, people: number}> = []
+
+    // Group bookings by date, service, and client
+    const groupedBookings = bookings.reduce((acc, booking) => {
+      const key = `${booking.date}-${booking.service}-${booking.client_name}`
+      if (!acc[key]) {
+        acc[key] = []
+      }
+      acc[key].push(booking)
+      return acc
+    }, {} as Record<string, Booking[]>)
+
+    Object.values(groupedBookings).forEach(bookings => {
+      if (bookings.length === 0) return
+
+      // Sort bookings by time
+      bookings.sort((a, b) => {
+        const timeA = a.time_hour * 60 + a.time_minute
+        const timeB = b.time_hour * 60 + b.time_minute
+        return timeA - timeB
+      })
+
+      // Find consecutive time ranges
+      let currentRange: Booking[] = [bookings[0]]
+
+      for (let i = 1; i < bookings.length; i++) {
+        const prevBooking = bookings[i - 1]
+        const currentBooking = bookings[i]
+
+        const prevTime = prevBooking.time_hour * 60 + prevBooking.time_minute
+        const currentTime = currentBooking.time_hour * 60 + currentBooking.time_minute
+
+        // Check if consecutive (15 minutes apart)
+        if (currentTime - prevTime === 15) {
+          currentRange.push(currentBooking)
+        } else {
+          // End current range and start new one
+          const startTime = `${currentRange[0].time_hour.toString().padStart(2, '0')}:${currentRange[0].time_minute.toString().padStart(2, '0')}`
+          const lastBooking = currentRange[currentRange.length - 1]
+          const endHour = lastBooking.time_minute + 15 >= 60 ? lastBooking.time_hour + 1 : lastBooking.time_hour
+          const endMinute = (lastBooking.time_minute + 15) % 60
+          const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
+
+          ranges.push({
+            startTime,
+            endTime,
+            service: currentRange[0].service,
+            clientName: currentRange[0].client_name,
+            date: currentRange[0].date,
+            people: currentRange[0].people
+          })
+
+          currentRange = [currentBooking]
+        }
+      }
+
+      // Add the last range
+      if (currentRange.length > 0) {
+        const startTime = `${currentRange[0].time_hour.toString().padStart(2, '0')}:${currentRange[0].time_minute.toString().padStart(2, '0')}`
+        const serviceDuration = getServiceDuration(currentRange[0].service)
+        const endTime = calculateEndTime(startTime, serviceDuration)
+
+        ranges.push({
+          startTime,
+          endTime,
+          service: currentRange[0].service,
+          clientName: currentRange[0].client_name,
+          date: currentRange[0].date,
+          people: currentRange[0].people
+        })
+      }
+    })
+
+    return ranges
+  }
+
+  // Function to group pending bookings by client only (1 request per user)
+  const groupPendingBookings = (bookings: Booking[]): Array<{bookings: Booking[], startTime: string, endTime: string, service: string, clientName: string, clientPhone: string, date: string, people: number, notes?: string, created_at: string}> => {
+    const groups: Array<{bookings: Booking[], startTime: string, endTime: string, service: string, clientName: string, clientPhone: string, date: string, people: number, notes?: string, created_at: string}> = []
+
+    // Group bookings by client only (not by service or date)
+    const groupedBookings = bookings.reduce((acc, booking) => {
+      const key = booking.client_name
+      if (!acc[key]) {
+        acc[key] = []
+      }
+      acc[key].push(booking)
+      return acc
+    }, {} as Record<string, Booking[]>)
+
+    Object.values(groupedBookings).forEach(bookings => {
+      if (bookings.length === 0) return
+
+      // Sort bookings by time
+      bookings.sort((a, b) => {
+        const timeA = a.time_hour * 60 + a.time_minute
+        const timeB = b.time_hour * 60 + b.time_minute
+        return timeA - timeB
+      })
+
+      const firstBooking = bookings[0]
+      const lastBooking = bookings[bookings.length - 1]
+
+      const startTime = `${firstBooking.time_hour.toString().padStart(2, '0')}:${firstBooking.time_minute.toString().padStart(2, '0')}`
+      const endTime = `${lastBooking.time_hour.toString().padStart(2, '0')}:${(lastBooking.time_minute + 15).toString().padStart(2, '0')}`
+
+      // Combine all services for this user
+      const services = [...new Set(bookings.map(b => b.service))].join(', ')
+      const totalPeople = bookings.reduce((sum, b) => sum + b.people, 0)
+
+      groups.push({
+        bookings,
+        startTime,
+        endTime,
+        service: services,
+        clientName: firstBooking.client_name,
+        clientPhone: firstBooking.client_phone,
+        date: firstBooking.date,
+        people: totalPeople,
+        notes: firstBooking.notes,
+        created_at: firstBooking.created_at
+      })
+    })
+
+    return groups
+  }
+
+  // Calculate analytics data
+  const calculateAnalytics = () => {
+    const allBookings = [...pendingBookings, ...approvedBookings, ...declinedBookings]
+
+    // Filter bookings based on selected period
+    const now = new Date()
+    const periodDays = analyticsPeriod === '7d' ? 7 : analyticsPeriod === '30d' ? 30 : 90
+    const periodStart = new Date(now.getTime() - (periodDays * 24 * 60 * 60 * 1000))
+
+    const periodBookings = allBookings.filter(booking =>
+      new Date(booking.created_at) >= periodStart
+    )
+
+    // Revenue data - group by date
+    const revenueByDate = periodBookings.reduce((acc, booking) => {
+      const date = new Date(booking.created_at).toISOString().split('T')[0]
+      const price = servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'
+      const numericPrice = parseInt(price.replace(/[^\d]/g, '')) || 0
+      const revenue = numericPrice * booking.people
+
+      if (!acc[date]) acc[date] = 0
+      acc[date] += revenue
+      return acc
+    }, {} as Record<string, number>)
+
+    const sortedDates = Object.keys(revenueByDate).sort()
+    setRevenueData({
+      labels: sortedDates.map(date => new Date(date).toLocaleDateString()),
+      datasets: [{
+        label: 'Revenue (RWF)',
+        data: sortedDates.map(date => revenueByDate[date]),
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    })
+
+    // Service popularity - count bookings by service
+    const serviceCount = periodBookings.reduce((acc, booking) => {
+      if (!acc[booking.service]) acc[booking.service] = 0
+      acc[booking.service] += 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const sortedServices = Object.entries(serviceCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 10) // Top 10 services
+
+    setServicePopularity({
+      labels: sortedServices.map(([service]) => service.length > 30 ? service.substring(0, 30) + '...' : service),
+      datasets: [{
+        label: 'Bookings',
+        data: sortedServices.map(([,count]) => count),
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.8)',
+          'rgba(54, 162, 235, 0.8)',
+          'rgba(255, 205, 86, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+          'rgba(153, 102, 255, 0.8)',
+          'rgba(255, 159, 64, 0.8)',
+          'rgba(199, 199, 199, 0.8)',
+          'rgba(83, 102, 255, 0.8)',
+          'rgba(255, 99, 255, 0.8)',
+          'rgba(99, 255, 132, 0.8)'
+        ],
+        borderWidth: 1
+      }]
+    })
+
+    // Booking trends - bookings over time
+    const bookingTrendsData = periodBookings.reduce((acc, booking) => {
+      const date = new Date(booking.created_at).toISOString().split('T')[0]
+      if (!acc[date]) acc[date] = 0
+      acc[date] += 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const sortedTrendDates = Object.keys(bookingTrendsData).sort()
+    setBookingTrends({
+      labels: sortedTrendDates.map(date => new Date(date).toLocaleDateString()),
+      datasets: [{
+        label: 'Bookings',
+        data: sortedTrendDates.map(date => bookingTrendsData[date]),
+        borderColor: 'rgb(16, 185, 129)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    })
+  }
+
   // Load all bookings when component mounts
   useEffect(() => {
     if (authenticated) {
@@ -371,6 +615,28 @@ const Admin = () => {
       loadBlockedSlots()
     }
   }, [authenticated])
+
+  // Calculate analytics when bookings or period changes
+  useEffect(() => {
+    if (authenticated && (pendingBookings.length > 0 || approvedBookings.length > 0 || declinedBookings.length > 0)) {
+      calculateAnalytics()
+    }
+  }, [authenticated, pendingBookings, approvedBookings, declinedBookings, analyticsPeriod])
+
+  // Update booked ranges when approved bookings change
+  useEffect(() => {
+    if (approvedBookings.length > 0) {
+      const ranges = groupBookingsIntoRanges(approvedBookings)
+      setBookedRanges(ranges.map(range => ({
+        startTime: range.startTime,
+        endTime: range.endTime,
+        spots: range.people,
+        date: range.date
+      })))
+    } else {
+      setBookedRanges([])
+    }
+  }, [approvedBookings])
 
 
 
@@ -388,11 +654,27 @@ const Admin = () => {
           table: 'bookings'
         },
         (payload) => {
-          console.log('New booking received:', payload)
+          console.log('INSERT event received:', payload)
           const newBooking = payload.new as Booking
-          setPendingBookings(prev => [newBooking, ...prev])
+          console.log('New booking details:', { id: newBooking.id, status: newBooking.status, client: newBooking.client_name })
 
-          toast.info(`New booking from ${newBooking.client_name}`)
+          // Only add to pending if it's actually a new pending booking
+          if (newBooking.status === 'pending') {
+            setPendingBookings(prev => {
+              // Check if booking already exists to prevent duplicates
+              const exists = prev.some(b => b.id === newBooking.id)
+              console.log('Booking exists in pending list:', exists)
+              if (!exists) {
+                console.log('Adding new pending booking to list')
+                return [newBooking, ...prev]
+              }
+              console.log('Skipping duplicate booking')
+              return prev
+            })
+            toast.info(`New booking from ${newBooking.client_name}`)
+          } else {
+            console.log('Skipping non-pending booking insert:', newBooking.status)
+          }
         }
       )
       .on(
@@ -406,8 +688,13 @@ const Admin = () => {
           const updatedBooking = payload.new as Booking
           const oldBooking = payload.old as Booking
 
-          // Remove from old status and add to new status
+          console.log('Booking update received:', { oldBooking, updatedBooking })
+
+          // Only process if status actually changed
           if (oldBooking.status !== updatedBooking.status) {
+            console.log('Status change detected:', oldBooking.status, '->', updatedBooking.status)
+
+            // Remove from old status list
             if (oldBooking.status === 'pending') {
               setPendingBookings(prev => prev.filter(b => b.id !== updatedBooking.id))
             } else if (oldBooking.status === 'active') {
@@ -416,22 +703,56 @@ const Admin = () => {
               setDeclinedBookings(prev => prev.filter(b => b.id !== updatedBooking.id))
             }
 
-      // Add to new status
-      if (updatedBooking.status === 'active') {
-        setApprovedBookings(prev => [updatedBooking, ...prev])
-      } else if (updatedBooking.status === 'cancelled') {
-        setDeclinedBookings(prev => [updatedBooking, ...prev])
-      }
+            // Add to new status list
+            if (updatedBooking.status === 'pending') {
+              setPendingBookings(prev => {
+                const exists = prev.some(b => b.id === updatedBooking.id)
+                return exists ? prev : [updatedBooking, ...prev]
+              })
+            } else if (updatedBooking.status === 'active') {
+              setApprovedBookings(prev => {
+                const exists = prev.some(b => b.id === updatedBooking.id)
+                return exists ? prev : [updatedBooking, ...prev]
+              })
+            } else if (updatedBooking.status === 'cancelled') {
+              setDeclinedBookings(prev => {
+                const exists = prev.some(b => b.id === updatedBooking.id)
+                return exists ? prev : [updatedBooking, ...prev]
+              })
+            }
           } else {
-            // Update within same status
+            // Update within same status (for other field changes)
             if (updatedBooking.status === 'pending') {
               setPendingBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b))
             } else if (updatedBooking.status === 'active') {
               setApprovedBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b))
-            } else if (updatedBooking.status === 'declined') {
+            } else if (updatedBooking.status === 'cancelled') {
               setDeclinedBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b))
             }
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'bookings'
+        },
+        (payload) => {
+          const deletedBooking = payload.old as Booking
+          console.log('Booking delete received:', deletedBooking)
+
+          // Remove from the appropriate status list
+          if (deletedBooking.status === 'pending') {
+            setPendingBookings(prev => prev.filter(b => b.id !== deletedBooking.id))
+          } else if (deletedBooking.status === 'active') {
+            setApprovedBookings(prev => prev.filter(b => b.id !== deletedBooking.id))
+          } else if (deletedBooking.status === 'cancelled') {
+            setDeclinedBookings(prev => prev.filter(b => b.id !== deletedBooking.id))
+          }
+
+          console.log('Removed deleted booking from UI:', deletedBooking.id)
         }
       )
       .subscribe()
@@ -489,9 +810,10 @@ const Admin = () => {
 
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: Home, color: 'text-blue-600' },
-    { id: 'pending', label: 'Pending', icon: AlertCircle, color: 'text-yellow-600', count: pendingBookings.length },
-    { id: 'approved', label: 'Approved', icon: UserCheck, color: 'text-green-600', count: approvedBookings.length },
-    { id: 'declined', label: 'Declined', icon: UserX, color: 'text-red-600', count: declinedBookings.length },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, color: 'text-indigo-600' },
+    { id: 'pending', label: 'Pending', icon: AlertCircle, color: 'text-yellow-600', count: groupPendingBookings(pendingBookings).length },
+    { id: 'approved', label: 'Approved', icon: UserCheck, color: 'text-green-600', count: groupBookingsIntoRanges(approvedBookings).length },
+    { id: 'declined', label: 'Declined', icon: UserX, color: 'text-red-600', count: groupBookingsIntoRanges(declinedBookings).length },
     { id: 'block-times', label: 'Block Times', icon: CalendarDays, color: 'text-purple-600' },
   ]
 
@@ -520,9 +842,33 @@ const Admin = () => {
     }
   }
 
+  // Settings handlers
+  const handleSaveBusinessInfo = () => {
+    toast.success('Business information saved successfully')
+    // TODO: Implement backend save
+  }
 
+  const handleSaveBusinessHours = () => {
+    toast.success('Business hours saved successfully')
+    // TODO: Implement backend save
+  }
 
-  const renderBookingCard = (booking: Booking, status: string) => {
+  const handleSaveNotifications = () => {
+    toast.success('Notification settings saved successfully')
+    // TODO: Implement backend save
+  }
+
+  const handleSavePricing = () => {
+    toast.success('Pricing changes saved successfully')
+    // TODO: Implement backend save
+  }
+
+  const handleSaveAdminSettings = () => {
+    toast.success('Admin settings saved successfully')
+    // TODO: Implement backend save
+  }
+
+  const renderBookingCard = (bookingOrGroup: Booking | {bookings: Booking[], startTime: string, endTime: string, service: string, clientName: string, clientPhone: string, date: string, people: number, notes?: string, created_at: string}, status: string, overrideStartTime?: string, overrideEndTime?: string, isRangeBooking?: boolean) => {
     const statusColors = {
       pending: 'bg-yellow-50 border-yellow-200',
       active: 'bg-green-50 border-green-200',
@@ -541,19 +887,31 @@ const Admin = () => {
       online: 'Online'
     }
 
+    // Check if it's a grouped booking (has bookings array) or single booking
+    const isGrouped = 'bookings' in bookingOrGroup
+
+    const booking = isGrouped ? bookingOrGroup.bookings[0] : bookingOrGroup
+    const timeDisplay = overrideStartTime && overrideEndTime ? `${overrideStartTime} - ${overrideEndTime}` : (isGrouped ? `${bookingOrGroup.startTime} - ${bookingOrGroup.endTime}` : `${booking.time_hour.toString().padStart(2, '0')}:${booking.time_minute.toString().padStart(2, '0')}`)
+    const bookingIds = isGrouped ? bookingOrGroup.bookings.map(b => b.id) : [booking.id]
+
     return (
-      <div key={booking.id} className={`p-4 border rounded-lg ${statusColors[status as keyof typeof statusColors]}`}>
+      <div key={bookingIds.join('-')} className={`p-4 border rounded-lg ${statusColors[status as keyof typeof statusColors]}`}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h4 className="font-medium text-gray-800">{booking.client_name}</h4>
               {statusBadges[status as keyof typeof statusBadges]}
+              {isRangeBooking && (
+                <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                  Time Range
+                </Badge>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600 mb-3">
               <p><strong>Phone:</strong> {booking.client_phone}</p>
               <p><strong>Service:</strong> {booking.service}</p>
-              <p><strong>Date:</strong> {new Date(booking.date).toLocaleDateString()}</p>
-              <p><strong>Time:</strong> {booking.time_hour.toString().padStart(2, '0')}:{booking.time_minute.toString().padStart(2, '0')}</p>
+              <p><strong>Booking Date:</strong> {new Date(booking.date).toLocaleDateString()}</p>
+              <p><strong>Time:</strong> {timeDisplay}</p>
               <p><strong>People:</strong> {booking.people}</p>
               <p><strong>Price:</strong> {servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'}</p>
               {booking.notes && <p><strong>Notes:</strong> {booking.notes}</p>}
@@ -561,12 +919,20 @@ const Admin = () => {
             <p className="text-xs text-gray-500">
               {status === 'pending' ? 'Requested' : 'Processed'}: {new Date(booking.created_at).toLocaleString()}
             </p>
+            {isRangeBooking && (
+              <p className="text-xs text-blue-600 mt-1">
+                This represents a time range based on service duration. Individual bookings cannot be deleted from here.
+              </p>
+            )}
           </div>
           <div className="flex gap-2 ml-4">
             {status === 'pending' && (
               <>
                 <Button
-                  onClick={() => handleApproveBooking(booking.id)}
+                  onClick={() => {
+                    // Approve all bookings in the group
+                    bookingIds.forEach(id => handleApproveBooking(id))
+                  }}
                   size="sm"
                   className="bg-green-600 hover:bg-green-700"
                 >
@@ -574,7 +940,10 @@ const Admin = () => {
                   Approve
                 </Button>
                 <Button
-                  onClick={() => handleDeclineBooking(booking.id)}
+                  onClick={() => {
+                    // Decline all bookings in the group
+                    bookingIds.forEach(id => handleDeclineBooking(id))
+                  }}
                   size="sm"
                   variant="destructive"
                 >
@@ -583,14 +952,19 @@ const Admin = () => {
                 </Button>
               </>
             )}
-            <Button
-              onClick={() => handleDeleteBooking(booking.id)}
-              size="sm"
-              variant="outline"
-              className="text-red-600 border-red-300 hover:bg-red-50"
-            >
-              Delete
-            </Button>
+            {(status === 'declined' || !isRangeBooking) && (
+              <Button
+                onClick={() => {
+                  // Delete all bookings in the group
+                  bookingIds.forEach(id => handleDeleteBooking(id))
+                }}
+                size="sm"
+                variant="outline"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -711,14 +1085,26 @@ const Admin = () => {
                   </Button>
                 </div>
 
-                {/* Stats Cards */}
+                {/* Stats Cards - Only Pending Bookings */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center">
                         <AlertCircle className="h-8 w-8 text-yellow-600" />
                         <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Pending</p>
+                          <p className="text-sm font-medium text-gray-600">Pending Requests</p>
+                          <p className="text-2xl font-bold text-gray-900">{groupPendingBookings(pendingBookings).length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <Clock className="h-8 w-8 text-blue-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Time Slots Booked</p>
                           <p className="text-2xl font-bold text-gray-900">{pendingBookings.length}</p>
                         </div>
                       </div>
@@ -728,35 +1114,29 @@ const Admin = () => {
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center">
-                        <UserCheck className="h-8 w-8 text-green-600" />
+                        <Users className="h-8 w-8 text-green-600" />
                         <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Approved</p>
-                          <p className="text-2xl font-bold text-gray-900">{approvedBookings.length}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <UserX className="h-8 w-8 text-red-600" />
-                        <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Declined</p>
-                          <p className="text-2xl font-bold text-gray-900">{declinedBookings.length}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <TrendingUp className="h-8 w-8 text-blue-600" />
-                        <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Total</p>
+                          <p className="text-sm font-medium text-gray-600">Total People</p>
                           <p className="text-2xl font-bold text-gray-900">
-                            {pendingBookings.length + approvedBookings.length + declinedBookings.length}
+                            {groupPendingBookings(pendingBookings).length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <TrendingUp className="h-8 w-8 text-purple-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Revenue Potential</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {groupPendingBookings(pendingBookings).reduce((total, group) => {
+                              const price = servicePrices[group.service as keyof typeof servicePrices] || '0 RWF'
+                              const numericPrice = parseInt(price.replace(/[^\d]/g, '')) || 0
+                              return total + (numericPrice * group.people)
+                            }, 0).toLocaleString()} RWF
                           </p>
                         </div>
                       </div>
@@ -764,11 +1144,11 @@ const Admin = () => {
                   </Card>
                 </div>
 
-                {/* Recent Activity */}
+                {/* Recent Activity - Only Pending Bookings */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <p className="text-sm text-gray-600">Latest booking requests and actions</p>
+                    <CardTitle>Recent Pending Requests</CardTitle>
+                    <p className="text-sm text-gray-600">Latest booking requests awaiting approval</p>
                   </CardHeader>
                   <CardContent>
                     {loadingBookings ? (
@@ -776,16 +1156,352 @@ const Admin = () => {
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
                         <p className="text-sm text-gray-600 mt-2">Loading activity...</p>
                       </div>
+                    ) : pendingBookings.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No pending booking requests</p>
+                        <p className="text-sm">New requests will appear here for review</p>
+                      </div>
                     ) : (
                       <div className="space-y-4">
-                        {[...pendingBookings.slice(0, 3), ...approvedBookings.slice(0, 2), ...declinedBookings.slice(0, 1)]
+                        {groupPendingBookings(pendingBookings.slice(0, 5))
                           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                          .slice(0, 5)
-                          .map((booking) => renderBookingCard(booking, booking.status))}
+                          .map((booking) => renderBookingCard(booking, 'pending'))}
                       </div>
                     )}
                   </CardContent>
                 </Card>
+              </div>
+            )}
+
+            {/* Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">Analytics Dashboard</h1>
+                    <p className="text-gray-600">Track your business performance and insights</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="analyticsPeriod" className="text-sm font-medium">Period:</Label>
+                      <select
+                        id="analyticsPeriod"
+                        value={analyticsPeriod}
+                        onChange={(e) => setAnalyticsPeriod(e.target.value as '7d' | '30d' | '90d')}
+                        className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="7d">Last 7 days</option>
+                        <option value="30d">Last 30 days</option>
+                        <option value="90d">Last 90 days</option>
+                      </select>
+                    </div>
+                    <Button
+                      onClick={loadAllBookings}
+                      disabled={loadingBookings}
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${loadingBookings ? 'animate-spin' : ''}`} />
+                      Refresh Data
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Key Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <DollarSign className="h-8 w-8 text-green-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {revenueData.datasets[0]?.data.reduce((sum: number, val: number) => sum + val, 0)?.toLocaleString() || '0'} RWF
+                          </p>
+                          <p className="text-xs text-gray-500">Last {analyticsPeriod}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <BarChart className="h-8 w-8 text-blue-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Total Bookings</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {bookingTrends.datasets[0]?.data.reduce((sum: number, val: number) => sum + val, 0) || 0}
+                          </p>
+                          <p className="text-xs text-gray-500">Last {analyticsPeriod}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <TrendingUp className="h-8 w-8 text-purple-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Avg. Revenue per Booking</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {bookingTrends.datasets[0]?.data.length > 0
+                              ? Math.round((revenueData.datasets[0]?.data.reduce((sum: number, val: number) => sum + val, 0) || 0) / bookingTrends.datasets[0]?.data.reduce((sum: number, val: number) => sum + val, 0) || 1)
+                              : 0} RWF
+                          </p>
+                          <p className="text-xs text-gray-500">Last {analyticsPeriod}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center">
+                        <PieChart className="h-8 w-8 text-orange-600" />
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Top Service</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {servicePopularity.labels?.[0]?.split(' ')?.[0] || 'N/A'}
+                          </p>
+                          <p className="text-xs text-gray-500">{servicePopularity.datasets[0]?.data?.[0] || 0} bookings</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Charts Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Revenue Chart */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <LineChart className="h-5 w-5" />
+                        Revenue Trends
+                      </CardTitle>
+                      <p className="text-sm text-gray-600">Daily revenue over the selected period</p>
+                    </CardHeader>
+                    <CardContent>
+                      {revenueData.labels?.length > 0 ? (
+                        <div className="h-80">
+                          <Line
+                            data={revenueData}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'top' as const,
+                                },
+                                title: {
+                                  display: false,
+                                },
+                              },
+                              scales: {
+                                y: {
+                                  beginAtZero: true,
+                                  ticks: {
+                                    callback: function(value) {
+                                      return value.toLocaleString() + ' RWF';
+                                    }
+                                  }
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-80 flex items-center justify-center text-gray-500">
+                          <div className="text-center">
+                            <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No revenue data available</p>
+                            <p className="text-sm">Data will appear as bookings are processed</p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Service Popularity Chart */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChart className="h-5 w-5" />
+                        Service Popularity
+                      </CardTitle>
+                      <p className="text-sm text-gray-600">Most booked services breakdown</p>
+                    </CardHeader>
+                    <CardContent>
+                      {servicePopularity.labels?.length > 0 ? (
+                        <div className="h-80">
+                          <Pie
+                            data={servicePopularity}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'right' as const,
+                                  labels: {
+                                    boxWidth: 12,
+                                    font: {
+                                      size: 11
+                                    }
+                                  }
+                                },
+                                tooltip: {
+                                  callbacks: {
+                                    label: function(context) {
+                                      return `${context.label}: ${context.parsed} bookings`;
+                                    }
+                                  }
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-80 flex items-center justify-center text-gray-500">
+                          <div className="text-center">
+                            <PieChart className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No service data available</p>
+                            <p className="text-sm">Data will appear as bookings are processed</p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Booking Trends Chart - Full Width */}
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart className="h-5 w-5" />
+                        Booking Trends
+                      </CardTitle>
+                      <p className="text-sm text-gray-600">Daily booking volume over the selected period</p>
+                    </CardHeader>
+                    <CardContent>
+                      {bookingTrends.labels?.length > 0 ? (
+                        <div className="h-80">
+                          <Bar
+                            data={bookingTrends}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'top' as const,
+                                },
+                                title: {
+                                  display: false,
+                                },
+                              },
+                              scales: {
+                                y: {
+                                  beginAtZero: true,
+                                  ticks: {
+                                    stepSize: 1
+                                  }
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-80 flex items-center justify-center text-gray-500">
+                          <div className="text-center">
+                            <BarChart className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No booking trend data available</p>
+                            <p className="text-sm">Data will appear as bookings are processed</p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Additional Insights */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        Performance Insights
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <span className="text-sm font-medium text-green-800">Best Performing Day</span>
+                        <span className="text-sm font-bold text-green-700">
+                          {revenueData.labels?.[revenueData.datasets[0]?.data.indexOf(Math.max(...(revenueData.datasets[0]?.data as number[]))) || 0] || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <span className="text-sm font-medium text-blue-800">Total Services Offered</span>
+                        <span className="text-sm font-bold text-blue-700">
+                          {Object.keys(servicePrices).length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
+                        <span className="text-sm font-medium text-purple-800">Avg. Bookings per Day</span>
+                        <span className="text-sm font-bold text-purple-700">
+                          {bookingTrends.labels?.length > 0
+                            ? Math.round((bookingTrends.datasets[0]?.data.reduce((sum: number, val: number) => sum + val, 0) || 0) / bookingTrends.labels.length)
+                            : 0}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="h-5 w-5" />
+                        Recent Activity
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {[...pendingBookings, ...approvedBookings, ...declinedBookings]
+                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                          .slice(0, 5)
+                          .map((booking, index) => (
+                            <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">{booking.client_name}</p>
+                                <p className="text-xs text-gray-600">{booking.service}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-500">
+                                  {new Date(booking.created_at).toLocaleDateString()}
+                                </p>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${
+                                    booking.status === 'active' ? 'bg-green-100 text-green-800' :
+                                    booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}
+                                >
+                                  {booking.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        {[...pendingBookings, ...approvedBookings, ...declinedBookings].length === 0 && (
+                          <div className="text-center py-8 text-gray-500">
+                            <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No recent activity</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             )}
 
@@ -823,7 +1539,10 @@ const Admin = () => {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {pendingBookings.map((booking) => renderBookingCard(booking, 'pending'))}
+                        {groupPendingBookings(pendingBookings).map((group) => {
+                          console.log('Rendering pending booking group:', group.bookings.map(b => b.id))
+                          return renderBookingCard(group, 'pending')
+                        })}
                       </div>
                     )}
                   </CardContent>
@@ -865,7 +1584,24 @@ const Admin = () => {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {approvedBookings.map((booking) => renderBookingCard(booking, 'active'))}
+                        {groupBookingsIntoRanges(approvedBookings).map((range) => {
+                          // Create a mock booking object for the range
+                          const mockBooking: Booking = {
+                            id: `range-${range.startTime}-${range.endTime}-${range.date}`,
+                            date: range.date,
+                            time_hour: parseInt(range.startTime.split(':')[0]),
+                            time_minute: parseInt(range.startTime.split(':')[1]),
+                            service: range.service,
+                            client_name: range.clientName,
+                            client_phone: '', // Not available in range
+                            people: range.people,
+                            notes: undefined,
+                            status: 'active',
+                            created_at: new Date().toISOString(),
+                            price: 0
+                          };
+                          return renderBookingCard(mockBooking, 'active', range.startTime, range.endTime, true);
+                        })}
                       </div>
                     )}
                   </CardContent>
@@ -907,7 +1643,24 @@ const Admin = () => {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {declinedBookings.map((booking) => renderBookingCard(booking, 'declined'))}
+                        {groupBookingsIntoRanges(declinedBookings).map((range) => {
+                          // Create a mock booking object for the range
+                          const mockBooking: Booking = {
+                            id: `range-${range.startTime}-${range.endTime}-${range.date}`,
+                            date: range.date,
+                            time_hour: parseInt(range.startTime.split(':')[0]),
+                            time_minute: parseInt(range.startTime.split(':')[1]),
+                            service: range.service,
+                            client_name: range.clientName,
+                            client_phone: '', // Not available in range
+                            people: range.people,
+                            notes: undefined,
+                            status: 'cancelled',
+                            created_at: new Date().toISOString(),
+                            price: 0
+                          };
+                          return renderBookingCard(mockBooking, 'declined', range.startTime, range.endTime, true);
+                        })}
                       </div>
                     )}
                   </CardContent>
@@ -1005,46 +1758,40 @@ const Admin = () => {
                   <div className="lg:col-span-2">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Booked Time Slots</CardTitle>
-                        <p className="text-sm text-gray-600">All approved bookings across all dates</p>
+                        <CardTitle>Booked Time Ranges</CardTitle>
+                        <p className="text-sm text-gray-600">Time ranges booked by service and duration</p>
                       </CardHeader>
                       <CardContent>
                         {loadingBookings ? (
                           <div className="text-center py-8">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                            <p className="text-sm text-gray-600 mt-2">Loading booked slots...</p>
+                            <p className="text-sm text-gray-600 mt-2">Loading booked ranges...</p>
                           </div>
-                        ) : approvedBookings.length === 0 ? (
+                        ) : bookedRanges.length === 0 ? (
                           <div className="text-center py-8 text-gray-500">
                             <CalendarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>No approved bookings yet</p>
-                            <p className="text-sm">Approved bookings will appear here</p>
+                            <p>No booked time ranges yet</p>
+                            <p className="text-sm">Approved bookings will appear here as time ranges</p>
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {approvedBookings.map((booking) => (
-                              <div key={booking.id} className="p-4 border rounded-lg bg-green-50 border-green-200">
+                            {bookedRanges.map((range, index) => (
+                              <div key={index} className="p-4 border rounded-lg bg-green-50 border-green-200">
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                       <p className="font-medium text-green-800">
-                                        {new Date(booking.date).toLocaleDateString()} at {booking.time_hour.toString().padStart(2, '0')}:{booking.time_minute.toString().padStart(2, '0')}
+                                        {new Date(range.date).toLocaleDateString()} from {range.startTime} to {range.endTime}
                                       </p>
                                       <Badge className="bg-green-100 text-green-800">
-                                        Booked
+                                        Booked Range
                                       </Badge>
                                     </div>
                                     <p className="text-sm text-green-600">
-                                      {booking.service} - {booking.people} person{booking.people > 1 ? 's' : ''}
-                                    </p>
-                                    <p className="text-sm text-green-700 font-medium">
-                                      {servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'}
+                                      Service duration covers this time range - {range.spots} spot{range.spots > 1 ? 's' : ''} booked
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                      Client: {booking.client_name} - {booking.client_phone}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      Booked on: {new Date(booking.created_at).toLocaleString()}
+                                      Time range based on selected service duration
                                     </p>
                                   </div>
                                 </div>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import SEO from "@/components/SEO";
 import { pageSEO } from "@/seo/seoConfig";
+import { useTranslation } from "react-i18next";
 
 function generateTitle(filename: string) {
   // Remove folder path & extension, replace - and _ with spaces, capitalize words
@@ -27,21 +28,24 @@ import vskyGateBanner from "@/assets/V&SKY Gate Banner.jpg";
 import reception from "@/assets/reception.png";
 import sittingroom from "@/assets/sitting_room.jpeg";
 import flowersdecoration from "@/assets/flowers_decoration.jpeg";
+import vskyvideo from "@/assets/vskyvideo.mp4";
 
 
 const manualGalleryItems = [
   { image: vskyGateBanner, title: "V&SKY Gate Banner", category: "Gallery" },
   { image: flowersdecoration, title: "Beautiful Flowers", category: "Gallery" },
+  { image: vskyvideo },
   { image: vskyspa, title: "V&SKY SPA", category: "Gallery" },
   { image: reception, title: "Reception", category: "Gallery" },
   { image: sittingroom, title: "Sitting Room", category: "Gallery" },
   { image: barco_sits, title: "Relaxing Place", category: "Gallery" },
-  { image: beds, title: "Beautiful Beds", category: "Gallery" },
+  { image: beds, title: "V&SKY Beds", category: "Gallery" },
   { image: upstairs, title: "Decorations", category: "Gallery" },
   { image: upsits, title: "Up Sits", category: "Gallery" },
 ];
 
 const Gallery = () => {
+  const { t } = useTranslation();
   const [loadedImages, setLoadedImages] = React.useState<Record<number, boolean>>({});
 
   // Preload first few critical images
@@ -92,9 +96,9 @@ const Gallery = () => {
       <section className="mt-[116px] pt-32 md:pt-24 pb-16 gradient-soft" aria-labelledby="gallery-hero-heading">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-3xl mx-auto animate-fade-up">
-            <h1 id="gallery-hero-heading" className="text-5xl md:text-6xl font-bold mb-6">Gallery</h1>
+            <h1 id="gallery-hero-heading" className="text-5xl md:text-6xl font-bold mb-6">{t("gallery.hero.title")}</h1>
             <p className="text-xl text-muted-foreground">
-              Take a virtual tour of a wellness retreat Rwanda oasis featuring Kigali wellness lounges, rejuvenating facial Rwanda suites, and luxury day spa amenities.
+              {t("gallery.hero.subtitle")}
             </p>
           </div>
         </div>
@@ -115,24 +119,36 @@ const Gallery = () => {
                   {!loadedImages[index] && (
                     <div className="absolute inset-0 bg-muted animate-pulse rounded-2xl" />
                   )}
-                  <img
-                    src={item.image}
-                    srcSet={`${item.image} 1x, ${item.image} 2x`}
-                    loading="lazy"
-                    decoding="async"
-                    alt={`${item.title} at V&SKY SPA Kigali`}
-                    className={`w-full h-full object-cover group-hover:scale-110 transition-smooth duration-500 ${
-                      loadedImages[index] ? 'opacity-100' : 'opacity-0'
-                    }`}
-                    onLoad={() => handleImageLoad(index)}
-                  />
+                  {item.image.endsWith(".mp4") ? (
+  <video
+    src={item.image}
+    className="w-full h-full object-cover rounded-2xl"
+    controls
+    autoPlay={false}
+    preload="metadata"
+  />
+) : (
+  <img
+    src={item.image}
+    srcSet={`${item.image} 1x, ${item.image} 2x`}
+    loading="lazy"
+    decoding="async"
+    alt={`${item.title} at V&SKY SPA Kigali`}
+    className={`w-full h-full object-cover group-hover:scale-110 transition-smooth duration-500 ${
+      loadedImages[index] ? "opacity-100" : "opacity-0"
+    }`}
+    onLoad={() => handleImageLoad(index)}
+  />
+)}
+
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-smooth">
-                  <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                    <p className="text-sm font-semibold text-primary-light mb-1">{item.category}</p>
-                    <h3 className="text-xl font-bold">{item.title}</h3>
-                  </div>
-                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-smooth pointer-events-none">
+  <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+    <p className="text-sm font-semibold text-primary-light mb-1">{item.category}</p>
+    <h3 className="text-xl font-bold">{item.title}</h3>
+  </div>
+</div>
+
               </div>
             ))}
           </div>
@@ -143,13 +159,13 @@ const Gallery = () => {
       <section className="py-20 bg-muted/30" aria-labelledby="gallery-cta-heading">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 id="gallery-cta-heading" className="text-4xl font-bold mb-6">Experience It Yourself</h2>
+            <h2 id="gallery-cta-heading" className="text-4xl font-bold mb-6">{t("gallery.cta.title")}</h2>
             <p className="text-xl text-muted-foreground mb-8">
-              Book an appointment and discover why V&SKY SPA is celebrated as the best spa in Kigali for premium relaxation Kigali experiences.
+              {t("gallery.cta.subtitle")}
             </p>
             <Link to="/booking">
               <Button variant="hero" size="lg" aria-label="Book Kigali spa visit">
-                Book Your Visit
+                {t("gallery.cta.button")}
               </Button>
             </Link>
           </div>

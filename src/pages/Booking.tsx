@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
 import SEO from "@/components/SEO";
@@ -26,6 +26,7 @@ import {
   getAvailability,
   createBooking,
   subscribeToAvailabilityChanges,
+  cancelPastBookings,
   TimeSlot,
   type Booking
 } from '@/lib/supabase';
@@ -59,6 +60,8 @@ const Booking = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [bookedSlots, setBookedSlots] = useState<Array<{time: string, service: string, clientName: string}>>([]);
+  const [fetchedBookedSlots, setFetchedBookedSlots] = useState<Array<{time: string, service: string, clientName: string, status: string}>>([]);
+  const bookingInProgressRef = useRef(false);
 
   // Service pricing map
   const servicePrices = {
@@ -109,6 +112,152 @@ const Booking = () => {
     return { start: startHour, end: endHour }
   }
 
+  // Helper function to generate available time slots
+  const generateTimeSlots = () => {
+    const { start, end } = getBusinessHours()
+    const [startHour, startMinute] = start.split(':').map(Number)
+    const [endHour, endMinute] = end.split(':').map(Number)
+
+    const slots = []
+    let currentHour = startHour
+    let currentMinute = startMinute
+
+    while (currentHour < endHour || (currentHour === endHour && currentMinute <= endMinute)) {
+      const timeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`
+      slots.push(timeString)
+
+      currentMinute += 15
+      if (currentMinute >= 60) {
+        currentMinute = 0
+        currentHour += 1
+      }
+    }
+
+    return slots
+  }
+
+  // Helper function to check if a time slot is booked
+  const isTimeSlotBooked = (timeString: string) => {
+    return fetchedBookedSlots.some(slot => slot.time === timeString && slot.status === 'active')
+  }
+
+  // Helper function to check if a time slot is blocked
+  const isTimeSlotBlocked = (timeString: string) => {
+    const [hours, minutes] = timeString.split(':').map(Number)
+    const slot = timeSlots.find(slot => slot.hour === hours && slot.minute === minutes)
+    return slot ? slot.isBlocked : false
+  }
+
+  // Helper function to check if a time slot is in the past
+  const isTimeSlotInPast = (timeString: string) => {
+    const slotTime = new Date(selectedDate)
+    const [hours, minutes] = timeString.split(':').map(Number)
+    slotTime.setHours(hours, minutes, 0, 0)
+    return slotTime < new Date()
+  }
+
+  // Helper function to get service duration in minutes
+  const getServiceDuration = (serviceName: string): number => {
+    const match = serviceName.match(/\((\d+)\s*min\)/);
+    if (match) {
+      return parseInt(match[1]);
+    }
+    // Default duration for services without specified time (like coffee)
+    return 30; // 30 minutes default
+  };
+
+  // Helper function to check if a time slot is already booked
+  const isTimeSlotConflicted = (timeString: string): boolean => {
+    return fetchedBookedSlots.some(slot => slot.time === timeString);
+  };
+
+  // Helper function to check if a time slot falls within any booked time range
+  const isTimeSlotInBookedRange = (timeString: string): boolean => {
+    const bookedRanges = groupBookedSlotsIntoRanges(fetchedBookedSlots);
+    const slotTime = new Date(`2000-01-01T${timeString}:00`);
+
+    return bookedRanges.some(range => {
+      const startTime = new Date(`2000-01-01T${range.startTime}:00`);
+      const endTime = new Date(`2000-01-01T${range.endTime}:00`);
+      return slotTime >= startTime && slotTime < endTime;
+    });
+  };
+
+  // Helper function to calculate end time by adding duration to start time
+  const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const startTotalMinutes = startHour * 60 + startMinute;
+    const endTotalMinutes = startTotalMinutes + durationMinutes;
+    const endHour = Math.floor(endTotalMinutes / 60);
+    const endMinute = endTotalMinutes % 60;
+    return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to group consecutive booked slots into time ranges
+  const groupBookedSlotsIntoRanges = (bookedSlots: Array<{time: string, service: string, clientName: string, status: string}>): Array<{startTime: string, endTime: string, service: string, clientName: string}> => {
+    const ranges: Array<{startTime: string, endTime: string, service: string, clientName: string}> = []
+
+    // Filter and sort booked slots by time (include both pending and active to prevent double booking)
+    const bookedSlotsFiltered = bookedSlots
+      .filter(slot => slot.status === 'active' || slot.status === 'pending')
+      .sort((a, b) => {
+        const [aHour, aMin] = a.time.split(':').map(Number)
+        const [bHour, bMin] = b.time.split(':').map(Number)
+        return aHour * 60 + aMin - (bHour * 60 + bMin)
+      })
+
+    if (bookedSlotsFiltered.length === 0) return ranges
+
+    let currentRange: typeof bookedSlotsFiltered = [bookedSlotsFiltered[0]]
+
+    for (let i = 1; i < bookedSlotsFiltered.length; i++) {
+      const prevSlot = bookedSlotsFiltered[i - 1]
+      const currentSlot = bookedSlotsFiltered[i]
+
+      const prevTime = prevSlot.time.split(':').map(Number)
+      const currentTime = currentSlot.time.split(':').map(Number)
+      const prevMinutes = prevTime[0] * 60 + prevTime[1]
+      const currentMinutes = currentTime[0] * 60 + currentTime[1]
+
+      // Check if consecutive (15 minutes apart) and same service/client
+      if (currentMinutes - prevMinutes === 15 &&
+          prevSlot.service === currentSlot.service &&
+          prevSlot.clientName === currentSlot.clientName) {
+        currentRange.push(currentSlot)
+      } else {
+        // End current range and start new one
+        const startTime = currentRange[0].time
+        const serviceDuration = getServiceDuration(currentRange[0].service)
+        const endTime = calculateEndTime(startTime, serviceDuration)
+
+        ranges.push({
+          startTime,
+          endTime,
+          service: currentRange[0].service,
+          clientName: currentRange[0].clientName
+        })
+
+        currentRange = [currentSlot]
+      }
+    }
+
+    // Add the last range
+    if (currentRange.length > 0) {
+      const startTime = currentRange[0].time
+      const serviceDuration = getServiceDuration(currentRange[0].service)
+      const endTime = calculateEndTime(startTime, serviceDuration)
+
+      ranges.push({
+        startTime,
+        endTime,
+        service: currentRange[0].service,
+        clientName: currentRange[0].clientName
+      })
+    }
+
+    return ranges
+  }
+
   // Helper function to check if a selected time is blocked/booked
   const isTimeBlocked = (timeString: string) => {
     if (!timeString) return false
@@ -131,8 +280,35 @@ const Booking = () => {
     }
   };
 
+  // Fetch booked slots for selected date
+  const fetchBookedSlots = async () => {
+    try {
+      const dateString = selectedDate.toISOString().split('T')[0];
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('time_hour, time_minute, service, client_name, status')
+        .eq('date', dateString)
+        .in('status', ['pending', 'active']); // Fetch both pending and approved bookings to prevent double booking
+
+      if (error) throw error;
+
+      const bookedSlots = bookings?.map(booking => ({
+        time: `${booking.time_hour.toString().padStart(2, '0')}:${booking.time_minute.toString().padStart(2, '0')}`,
+        service: booking.service,
+        clientName: booking.client_name,
+        status: booking.status
+      })) || [];
+
+      setFetchedBookedSlots(bookedSlots);
+    } catch (error) {
+      console.error('Error fetching booked slots:', error);
+      setFetchedBookedSlots([]);
+    }
+  };
+
   useEffect(() => {
     loadAvailability();
+    fetchBookedSlots();
   }, [selectedDate]);
 
   // Subscribe to real-time changes
@@ -142,6 +318,82 @@ const Booking = () => {
     });
 
     return unsubscribe;
+  }, [selectedDate]);
+
+  // Subscribe to real-time booking changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('booking-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings'
+        },
+        (payload) => {
+          console.log('New booking inserted:', payload.new);
+          // Refresh booked slots when a new booking is made
+          fetchBookedSlots();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings'
+        },
+        (payload) => {
+          console.log('Booking updated:', payload.new);
+          // Refresh booked slots when a booking status changes
+          fetchBookedSlots();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'bookings'
+        },
+        (payload) => {
+          console.log('Booking deleted');
+          // Refresh booked slots when a booking is deleted
+          fetchBookedSlots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate]);
+
+  // Periodically cancel past bookings and refresh availability
+  useEffect(() => {
+    const cancelPastBookingsAndRefresh = async () => {
+      try {
+        await cancelPastBookings();
+        // Only refresh if we're on today's date
+        const today = new Date().toISOString().split('T')[0];
+        const selectedDateStr = selectedDate.toISOString().split('T')[0];
+        if (selectedDateStr === today) {
+          loadAvailability();
+          fetchBookedSlots();
+        }
+      } catch (error) {
+        console.error('Error canceling past bookings:', error);
+      }
+    };
+
+    // Cancel past bookings immediately when component mounts
+    cancelPastBookingsAndRefresh();
+
+    // Set up interval to check every 5 minutes
+    const interval = setInterval(cancelPastBookingsAndRefresh, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(interval);
   }, [selectedDate]);
 
   // Update clients array when people count changes
@@ -160,6 +412,17 @@ const Booking = () => {
       return newClients;
     });
   }, [people]);
+
+  // Automatically clear selectedTime if it becomes booked or conflicted
+  useEffect(() => {
+    setClients(prev => prev.map(client => {
+      if (client.selectedTime && (isTimeSlotConflicted(client.selectedTime) || isTimeSlotBlocked(client.selectedTime) || isTimeSlotInBookedRange(client.selectedTime))) {
+        toast.error(`The selected time ${client.selectedTime} is no longer available and has been cleared. Please choose a different time.`);
+        return { ...client, selectedTime: '' };
+      }
+      return client;
+    }));
+  }, [fetchedBookedSlots, timeSlots]);
 
   // Prefill service from query param
   useEffect(() => {
@@ -184,9 +447,26 @@ const Booking = () => {
       }
 
       // Check if time slot is booked or blocked
-      const slot = timeSlots.find(s => s.timeString === value);
-      if (slot && (!slot.available || slot.isBlocked)) {
+      if (isTimeBlocked(value)) {
         toast.error('This time slot is not available. Please choose a different time.');
+        return;
+      }
+
+      // Check if time slot is conflicted (booked)
+      if (isTimeSlotConflicted(value)) {
+        toast.error('This time slot is already booked. Please choose a different time.');
+        return;
+      }
+    }
+
+    if (field === 'service') {
+      // When service changes, validate existing selectedTime
+      const client = clients[index];
+      if (client.selectedTime && isTimeSlotConflicted(client.selectedTime)) {
+        toast.error('The selected time is not available for this service. Please choose a different time.');
+        setClients(prev => prev.map((c, i) =>
+          i === index ? { ...c, [field]: value, selectedTime: '' } : c
+        ));
         return;
       }
     }
@@ -208,6 +488,11 @@ const Booking = () => {
   );
 
   const handleSubmitBooking = async () => {
+    // Prevent multiple submissions
+    if (bookingInProgressRef.current) {
+      return;
+    }
+
     // Validate all clients have required info and selected timeslots
     for (let i = 0; i < people; i++) {
       const client = clients[i]
@@ -218,25 +503,27 @@ const Booking = () => {
     }
 
     setBookingLoading(true)
+    bookingInProgressRef.current = true;
 
     try {
       // Create bookings for each person with their individual timeslots
       const bookingPromises = clients.map(client => {
-        // Parse time string safely (now always HH:00 format)
+        // Parse time string to get hours and minutes
         const timeParts = client.selectedTime.split(':')
         const hours = parseInt(timeParts[0]) || 0
-        const minutes = 0 // Always 0 for hourly slots
+        const minutes = parseInt(timeParts[1]) || 0
 
         console.log('Creating booking:', {
           timeString: client.selectedTime,
           timeParts,
           hours,
           minutes,
-          isHoursValid: hours >= 0 && hours <= 23
+          isHoursValid: hours >= 0 && hours <= 23,
+          isMinutesValid: minutes >= 0 && minutes <= 59
         })
 
         // Additional validation
-        if (isNaN(hours)) {
+        if (isNaN(hours) || isNaN(minutes)) {
           throw new Error(`Invalid time format: ${client.selectedTime}`)
         }
 
@@ -244,25 +531,72 @@ const Booking = () => {
           throw new Error(`Invalid hour: ${hours}`)
         }
 
+        if (minutes < 0 || minutes > 59) {
+          throw new Error(`Invalid minutes: ${minutes}. Minutes must be between 0 and 59.`)
+        }
+
+        // Ensure minutes are in valid increments (0, 15, 30, 45)
+        if (minutes % 15 !== 0) {
+          throw new Error(`Invalid minutes: ${minutes}. Minutes must be in 15-minute increments (0, 15, 30, 45).`)
+        }
+
+        // Get service duration
+        const serviceDuration = getServiceDuration(client.service);
+
         // Get price from servicePrices map and convert to number
         const priceString = servicePrices[client.service as keyof typeof servicePrices];
         const price = priceString ? parseFloat(priceString.replace(/[^\d.]/g, '')) : 0;
 
-        return createBooking({
-          date: selectedDate.toISOString().split('T')[0],
-          time_hour: hours,
-          time_minute: minutes,
-          service: client.service,
-          people: 1, // Each booking is for 1 person
-          client_name: client.name,
-          client_phone: client.phone,
-          notes: notes.trim() || undefined,
-          price: price,
-          status: 'pending'
-        })
+        // If service has duration > 30 minutes, create bookings for all time slots
+        if (serviceDuration > 30) {
+          const bookingsForDuration = [];
+          const startTime = new Date(selectedDate);
+          startTime.setHours(hours, minutes, 0, 0);
+
+          const endTime = new Date(startTime);
+          endTime.setMinutes(endTime.getMinutes() + serviceDuration);
+
+          // Create booking for each 15-minute slot that the service occupies
+          let currentTime = new Date(startTime);
+          while (currentTime < endTime) {
+            bookingsForDuration.push(createBooking({
+              date: selectedDate.toISOString().split('T')[0],
+              time_hour: currentTime.getHours(),
+              time_minute: currentTime.getMinutes(),
+              service: client.service,
+              people: 1, // Each booking is for 1 person
+              client_name: client.name,
+              client_phone: client.phone,
+              notes: notes.trim() || undefined,
+              price: price,
+              status: 'pending'
+            }));
+
+            // Move to next 15-minute slot
+            currentTime.setMinutes(currentTime.getMinutes() + 15);
+          }
+
+          return Promise.all(bookingsForDuration);
+        } else {
+          // For services 30 minutes or less, create single booking
+          return createBooking({
+            date: selectedDate.toISOString().split('T')[0],
+            time_hour: hours,
+            time_minute: minutes,
+            service: client.service,
+            people: 1, // Each booking is for 1 person
+            client_name: client.name,
+            client_phone: client.phone,
+            notes: notes.trim() || undefined,
+            price: price,
+            status: 'pending'
+          });
+        }
       })
 
-      await Promise.all(bookingPromises)
+      // Flatten the array since some promises return arrays
+      const flattenedPromises = bookingPromises.flat();
+      await Promise.all(flattenedPromises)
 
       // Add booked slots to display immediately
       const newBookedSlots = clients.map(client => ({
@@ -284,6 +618,7 @@ const Booking = () => {
       toast.error('Failed to create booking. Please try again.')
     } finally {
       setBookingLoading(false)
+      bookingInProgressRef.current = false;
     }
   }
 
@@ -302,21 +637,22 @@ const Booking = () => {
     try {
       // Create bookings for each person with their individual timeslots
       const bookingPromises = clients.map(client => {
-        // Parse time string safely (now always HH:00 format)
+        // Parse time string to get hours and minutes
         const timeParts = client.selectedTime.split(':')
         const hours = parseInt(timeParts[0]) || 0
-        const minutes = 0 // Always 0 for hourly slots
+        const minutes = parseInt(timeParts[1]) || 0
 
         console.log('Creating cash booking:', {
           timeString: client.selectedTime,
           timeParts,
           hours,
           minutes,
-          isHoursValid: hours >= 0 && hours <= 23
+          isHoursValid: hours >= 0 && hours <= 23,
+          isMinutesValid: minutes >= 0 && minutes <= 59
         })
 
         // Additional validation
-        if (isNaN(hours)) {
+        if (isNaN(hours) || isNaN(minutes)) {
           throw new Error(`Invalid time format: ${client.selectedTime}`)
         }
 
@@ -324,25 +660,72 @@ const Booking = () => {
           throw new Error(`Invalid hour: ${hours}`)
         }
 
+        if (minutes < 0 || minutes > 59) {
+          throw new Error(`Invalid minutes: ${minutes}. Minutes must be between 0 and 59.`)
+        }
+
+        // Ensure minutes are in valid increments (0, 15, 30, 45)
+        if (minutes % 15 !== 0) {
+          throw new Error(`Invalid minutes: ${minutes}. Minutes must be in 15-minute increments (0, 15, 30, 45).`)
+        }
+
+        // Get service duration
+        const serviceDuration = getServiceDuration(client.service);
+
         // Get price from servicePrices map and convert to number
         const priceString = servicePrices[client.service as keyof typeof servicePrices];
         const price = priceString ? parseFloat(priceString.replace(/[^\d.]/g, '')) : 0;
 
-        return createBooking({
-          date: selectedDate.toISOString().split('T')[0],
-          time_hour: hours,
-          time_minute: minutes,
-          service: client.service,
-          people: 1, // Each booking is for 1 person
-          client_name: client.name,
-          client_phone: client.phone,
-          notes: (notes.trim() ? notes.trim() + ' ' : '') + '[CASH PAYMENT]',
-          price: price,
-          status: 'pending'
-        })
+        // If service has duration > 30 minutes, create bookings for all time slots
+        if (serviceDuration > 30) {
+          const bookingsForDuration = [];
+          const startTime = new Date(selectedDate);
+          startTime.setHours(hours, minutes, 0, 0);
+
+          const endTime = new Date(startTime);
+          endTime.setMinutes(endTime.getMinutes() + serviceDuration);
+
+          // Create booking for each 15-minute slot that the service occupies
+          let currentTime = new Date(startTime);
+          while (currentTime < endTime) {
+            bookingsForDuration.push(createBooking({
+              date: selectedDate.toISOString().split('T')[0],
+              time_hour: currentTime.getHours(),
+              time_minute: currentTime.getMinutes(),
+              service: client.service,
+              people: 1, // Each booking is for 1 person
+              client_name: client.name,
+              client_phone: client.phone,
+              notes: (notes.trim() ? notes.trim() + ' ' : '') + '[CASH PAYMENT]',
+              price: price,
+              status: 'pending'
+            }));
+
+            // Move to next 15-minute slot
+            currentTime.setMinutes(currentTime.getMinutes() + 15);
+          }
+
+          return Promise.all(bookingsForDuration);
+        } else {
+          // For services 30 minutes or less, create single booking
+          return createBooking({
+            date: selectedDate.toISOString().split('T')[0],
+            time_hour: hours,
+            time_minute: minutes,
+            service: client.service,
+            people: 1, // Each booking is for 1 person
+            client_name: client.name,
+            client_phone: client.phone,
+            notes: (notes.trim() ? notes.trim() + ' ' : '') + '[CASH PAYMENT]',
+            price: price,
+            status: 'pending'
+          });
+        }
       })
 
-      await Promise.all(bookingPromises)
+      // Flatten the array since some promises return arrays
+      const flattenedPromises = bookingPromises.flat();
+      await Promise.all(flattenedPromises)
 
       // Add booked slots to display immediately
       const newBookedSlots = clients.map(client => ({
@@ -364,6 +747,7 @@ const Booking = () => {
       toast.error('Failed to create booking. Please try again.')
     } finally {
       setBookingLoading(false)
+      bookingInProgressRef.current = false;
     }
   }
 
@@ -506,7 +890,11 @@ const Booking = () => {
                     </p>
                   </div>
                   <Button
-                    onClick={handleSubmitBooking}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleSubmitBooking();
+                    }}
                     disabled={bookingLoading}
                     className="w-full"
                     variant="default"
@@ -540,7 +928,11 @@ const Booking = () => {
                     </p>
                   </div>
                   <Button
-                    onClick={handleCashBooking}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleCashBooking();
+                    }}
                     disabled={bookingLoading}
                     className="w-full"
                     variant="outline"
@@ -629,8 +1021,8 @@ const Booking = () => {
                       Booked Time Slots
                     </CardTitle>
                     <div className="flex gap-2 flex-wrap">
-                      <Badge variant="outline" className="bg-gray-100 text-gray-800">Fully Booked</Badge>
-                      <Badge variant="outline" className="bg-red-100 text-red-800">Blocked</Badge>
+                      <Badge variant="outline" className="bg-gray-100 text-gray-800">Booked</Badge>
+                      <Badge variant="outline" className="bg-red-100 text-red-800">Booked</Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -642,8 +1034,8 @@ const Booking = () => {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
+                        {/* Show blocked slots */}
                         {timeSlots.filter(slot => {
-                          // Only show blocked slots, and exclude all past times
                           if (!slot.isBlocked) return false;
                           const slotTime = new Date(selectedDate);
                           slotTime.setHours(slot.hour, slot.minute, 0, 0);
@@ -651,18 +1043,44 @@ const Booking = () => {
                           return true;
                         }).map((slot) => (
                           <div
-                            key={`${slot.hour}-${slot.minute}`}
+                            key={`blocked-${slot.hour}-${slot.minute}`}
                             className={`p-3 rounded-lg border-2 transition-all ${getSlotColor(slot)}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-medium">{slot.timeString}</span>
                               <Badge variant="outline" className="text-xs">
-                                Blocked
+                                Booked
                               </Badge>
                             </div>
                             <p className="text-xs mt-1">{slot.label}</p>
                           </div>
                         ))}
+
+                        {/* Show booked time ranges */}
+                        {groupBookedSlotsIntoRanges(fetchedBookedSlots.filter(slot => {
+                          // Exclude past times
+                          const slotTime = new Date(selectedDate);
+                          const [hours] = slot.time.split(':').map(Number);
+                          slotTime.setHours(hours, 0, 0, 0);
+                          if (slotTime < new Date()) return false;
+                          return slot.status === 'active' || slot.status === 'pending';
+                        })).map((range, index) => (
+                          <div
+                            key={`booked-range-${index}`}
+                            className="p-3 rounded-lg border-2 transition-all bg-gray-100 border-gray-300 text-gray-800"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{range.startTime} - {range.endTime}</span>
+                              <Badge variant="outline" className="text-xs">
+                                BOOKED
+                              </Badge>
+                            </div>
+                            <p className="text-xs mt-1">{range.service}</p>
+                            <p className="text-xs mt-1 text-gray-600">{range.clientName}</p>
+                          </div>
+                        ))}
+
+                        {/* Show message if no booked slots */}
                         {timeSlots.filter(slot => {
                           if (!slot.isBlocked) return false;
                           if (selectedDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0]) {
@@ -672,7 +1090,13 @@ const Booking = () => {
                             if (slotTime < now) return false;
                           }
                           return true;
-                        }).length === 0 && (
+                        }).length === 0 && groupBookedSlotsIntoRanges(fetchedBookedSlots.filter(slot => {
+                          const slotTime = new Date(selectedDate);
+                          const [hours] = slot.time.split(':').map(Number);
+                          slotTime.setHours(hours, 0, 0, 0);
+                          if (slotTime < new Date()) return false;
+                          return true;
+                        })).length === 0 && (
                           <p className="text-sm text-muted-foreground text-center py-4">No booked slots for this date</p>
                         )}
                       </div>
@@ -763,15 +1187,48 @@ const Booking = () => {
 
                         <div>
                           <Label htmlFor={`selectedTime-${index}`}>Select Time *</Label>
-                          <Input
-                            id={`selectedTime-${index}`}
-                            type="time"
+                          {/* Show booked times summary */}
+                          {fetchedBookedSlots.length > 0 && (
+                            <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                              <p className="text-sm font-medium text-red-800 mb-1">Booked Times Today:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {groupBookedSlotsIntoRanges(fetchedBookedSlots.filter(slot => {
+                                  const slotTime = new Date(selectedDate);
+                                  const [hours] = slot.time.split(':').map(Number);
+                                  slotTime.setHours(hours, 0, 0, 0);
+                                  return slotTime >= new Date();
+                                })).map((range, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">
+                                    {range.startTime} - {range.endTime}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <Select
                             value={client.selectedTime}
-                            onChange={(e) => handleClientChange(index, 'selectedTime', e.target.value)}
-                            min={getBusinessHours().start}
-                            max={getBusinessHours().end}
-                            step="900" // 15 minute intervals
-                          />
+                            onValueChange={(value) => handleClientChange(index, 'selectedTime', value)}
+                          >
+                            <SelectTrigger id={`selectedTime-${index}`}>
+                              <SelectValue placeholder="Choose a time slot" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60 overflow-y-auto">
+                              {generateTimeSlots().filter(timeSlot => {
+                                const isBlocked = isTimeSlotBlocked(timeSlot);
+                                const isInPast = isTimeSlotInPast(timeSlot);
+                                const isConflicted = isTimeSlotConflicted(timeSlot);
+                                const isInBookedRange = isTimeSlotInBookedRange(timeSlot);
+                                return !isConflicted && !isBlocked && !isInPast && !isInBookedRange;
+                              }).map(timeSlot => (
+                                <SelectItem
+                                  key={timeSlot}
+                                  value={timeSlot}
+                                >
+                                  {timeSlot}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           {client.selectedTime && isTimeBlocked(client.selectedTime) && (
                             <p className="text-sm text-red-600 mt-1">This time is not available. Please choose a different time.</p>
                           )}
