@@ -529,8 +529,51 @@ const Admin = () => {
       new Date(booking.created_at) >= periodStart
     )
 
+    // If no real bookings, show demo data for illustration
+    const hasRealData = periodBookings.length > 0
+    let demoBookings = periodBookings
+
+    if (!hasRealData) {
+      // Generate demo data for the selected period
+      demoBookings = []
+      const demoServices = [
+        "Deep Cleaning for Full Body (60 min)",
+        "Face Cleaning & Moisturizing (60 min)",
+        "Hair Braiding (60 min)",
+        "Professional Styling (30 min)",
+        "Full Body Relax Massage (Oil) (60 min)",
+        "Hot Stone Massage (Oil) (90 min)"
+      ]
+
+      for (let i = 0; i < periodDays; i++) {
+        const date = new Date(now.getTime() - (i * 24 * 60 * 60 * 1000))
+        const numBookings = Math.floor(Math.random() * 5) + 1 // 1-5 bookings per day
+
+        for (let j = 0; j < numBookings; j++) {
+          const service = demoServices[Math.floor(Math.random() * demoServices.length)]
+          const people = Math.floor(Math.random() * 2) + 1 // 1-2 people
+          const status = Math.random() > 0.3 ? 'active' : Math.random() > 0.5 ? 'pending' : 'cancelled'
+
+          demoBookings.push({
+            id: `demo-${i}-${j}`,
+            date: date.toISOString().split('T')[0],
+            time_hour: Math.floor(Math.random() * 10) + 10, // 10 AM - 8 PM
+            time_minute: Math.floor(Math.random() * 4) * 15, // 0, 15, 30, 45 minutes
+            service,
+            people,
+            client_name: `Demo Client ${i}-${j}`,
+            client_phone: '+250 788 123 456',
+            notes: 'Demo booking',
+            status: status as 'pending' | 'active' | 'cancelled',
+            created_at: date.toISOString(),
+            price: 0
+          })
+        }
+      }
+    }
+
     // Revenue data - group by date
-    const revenueByDate = periodBookings.reduce((acc, booking) => {
+    const revenueByDate = demoBookings.reduce((acc, booking) => {
       const date = new Date(booking.created_at).toISOString().split('T')[0]
       const price = servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'
       const numericPrice = parseInt(price.replace(/[^\d]/g, '')) || 0
@@ -545,7 +588,7 @@ const Admin = () => {
     setRevenueData({
       labels: sortedDates.map(date => new Date(date).toLocaleDateString()),
       datasets: [{
-        label: 'Revenue (RWF)',
+        label: hasRealData ? 'Revenue (RWF)' : 'Demo Revenue (RWF)',
         data: sortedDates.map(date => revenueByDate[date]),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -555,7 +598,7 @@ const Admin = () => {
     })
 
     // Service popularity - count bookings by service
-    const serviceCount = periodBookings.reduce((acc, booking) => {
+    const serviceCount = demoBookings.reduce((acc, booking) => {
       if (!acc[booking.service]) acc[booking.service] = 0
       acc[booking.service] += 1
       return acc
@@ -568,7 +611,7 @@ const Admin = () => {
     setServicePopularity({
       labels: sortedServices.map(([service]) => service.length > 30 ? service.substring(0, 30) + '...' : service),
       datasets: [{
-        label: 'Bookings',
+        label: hasRealData ? 'Bookings' : 'Demo Bookings',
         data: sortedServices.map(([,count]) => count),
         backgroundColor: [
           'rgba(255, 99, 132, 0.8)',
@@ -587,7 +630,7 @@ const Admin = () => {
     })
 
     // Booking trends - bookings over time
-    const bookingTrendsData = periodBookings.reduce((acc, booking) => {
+    const bookingTrendsData = demoBookings.reduce((acc, booking) => {
       const date = new Date(booking.created_at).toISOString().split('T')[0]
       if (!acc[date]) acc[date] = 0
       acc[date] += 1
@@ -598,7 +641,7 @@ const Admin = () => {
     setBookingTrends({
       labels: sortedTrendDates.map(date => new Date(date).toLocaleDateString()),
       datasets: [{
-        label: 'Bookings',
+        label: hasRealData ? 'Bookings' : 'Demo Bookings',
         data: sortedTrendDates.map(date => bookingTrendsData[date]),
         borderColor: 'rgb(16, 185, 129)',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -1195,6 +1238,8 @@ const Admin = () => {
                     </Button>
                   </div>
                 </div>
+
+
 
                 {/* Key Metrics Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
