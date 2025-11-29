@@ -1085,8 +1085,8 @@ const Admin = () => {
                   </Button>
                 </div>
 
-                {/* Stats Cards - Only Pending Bookings */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center">
@@ -1102,23 +1102,11 @@ const Admin = () => {
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center">
-                        <Clock className="h-8 w-8 text-blue-600" />
-                        <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Time Slots Booked</p>
-                          <p className="text-2xl font-bold text-gray-900">{pendingBookings.length}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
                         <Users className="h-8 w-8 text-green-600" />
                         <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Total People</p>
+                          <p className="text-sm font-medium text-gray-600">Total People Approved</p>
                           <p className="text-2xl font-bold text-gray-900">
-                            {groupPendingBookings(pendingBookings).length}
+                            {approvedBookings.reduce((total, booking) => total + booking.people, 0)}
                           </p>
                         </div>
                       </div>
@@ -1128,14 +1116,14 @@ const Admin = () => {
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center">
-                        <TrendingUp className="h-8 w-8 text-purple-600" />
+                        <DollarSign className="h-8 w-8 text-purple-600" />
                         <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-600">Revenue Potential</p>
+                          <p className="text-sm font-medium text-gray-600">Total Money Approved</p>
                           <p className="text-2xl font-bold text-gray-900">
-                            {groupPendingBookings(pendingBookings).reduce((total, group) => {
-                              const price = servicePrices[group.service as keyof typeof servicePrices] || '0 RWF'
+                            {approvedBookings.reduce((total, booking) => {
+                              const price = servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'
                               const numericPrice = parseInt(price.replace(/[^\d]/g, '')) || 0
-                              return total + (numericPrice * group.people)
+                              return total + (numericPrice * booking.people)
                             }, 0).toLocaleString()} RWF
                           </p>
                         </div>
