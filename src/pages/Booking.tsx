@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import SEO from "@/components/SEO";
 import { pageSEO, faqContent } from "@/seo/seoConfig";
 import {
@@ -33,6 +34,7 @@ import {
 import { Plus, Minus, Clock, Users, Calendar as CalendarIcon } from 'lucide-react';
 
 const Booking = () => {
+  const { t } = useTranslation();
   const bookingSEO = pageSEO.booking;
   const faqSchema = {
     "@context": "https://schema.org",
@@ -783,25 +785,25 @@ const Booking = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="font-medium">Date: {selectedDate.toLocaleDateString()}</p>
-              <p className="font-medium">Time: {clients.map(client => client.selectedTime).filter(Boolean).join(', ') || 'Multiple times selected'}</p>
-              <p className="font-medium">People: {people}</p>
+              <p className="font-medium">{t('booking.summary.date')}: {selectedDate.toLocaleDateString()}</p>
+              <p className="font-medium">{t('booking.summary.time')}: {clients.map(client => client.selectedTime).filter(Boolean).join(', ') || t('booking.summary.multiple')}</p>
+              <p className="font-medium">{t('booking.summary.people')}: {people}</p>
             </div>
 
             <div className="space-y-2">
               {clients.map((client, index) => (
                 <div key={index} className="text-sm p-3 border rounded">
-                  <p><strong>Person {index + 1}:</strong> {client.name}</p>
-                  <p><strong>Service:</strong> {client.service}</p>
-                  <p><strong>Price:</strong> {servicePrices[client.service as keyof typeof servicePrices]}</p>
-                  <p><strong>Time:</strong> {client.selectedTime || 'Not selected'}</p>
+                  <p><strong>{t('booking.person.label', { number: index + 1 })}:</strong> {client.name}</p>
+                  <p><strong>{t('booking.summary.service')}:</strong> {client.service}</p>
+                  <p><strong>{t('booking.summary.price')}:</strong> {servicePrices[client.service as keyof typeof servicePrices]}</p>
+                  <p><strong>{t('booking.summary.time')}:</strong> {client.selectedTime || t('booking.summary.not_selected')}</p>
                 </div>
               ))}
             </div>
 
             {/* Price Breakdown */}
             <div className="p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-semibold mb-2">Price Breakdown:</h4>
+              <h4 className="font-semibold mb-2">{t('booking.price.breakdown')}:</h4>
               {clients.map((client, index) => (
                 <div key={index} className="flex justify-between text-sm mb-1">
                   <span>{client.service}:</span>
@@ -810,7 +812,7 @@ const Booking = () => {
               ))}
               <hr className="my-2" />
               <div className="flex justify-between font-bold">
-                <span>Total:</span>
+                <span>{t('booking.total')}:</span>
                 <span>
                   {(() => {
                     const prices = clients.map(client => {
@@ -827,7 +829,7 @@ const Booking = () => {
 
             {notes && (
               <div className="text-sm">
-                <p><strong>Notes:</strong> {notes}</p>
+                <p><strong>{t('booking.notes.selected')}:</strong> {notes}</p>
               </div>
             )}
 
@@ -837,7 +839,7 @@ const Booking = () => {
                 variant="outline"
                 className="flex-1"
               >
-                Cancel
+                {t('booking.cancel.button')}
               </Button>
               <Button
                 onClick={() => {
@@ -846,7 +848,7 @@ const Booking = () => {
                 }}
                 className="flex-1"
               >
-                Confirm
+                {t('booking.confirm.button')}
               </Button>
             </div>
           </div>
@@ -873,20 +875,20 @@ const Booking = () => {
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
                       <span className="text-white font-bold text-sm">M</span>
                     </div>
-                    MTN Mobile Money
+                    {t('booking.payment.mtn.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <p className="text-sm text-green-700 mb-2">
-                      Please send the total amount to:
+                      {t('booking.payment.mtn.instruction')}
                     </p>
                     <div className="bg-white rounded p-3 border text-center">
                       <p className="text-lg font-bold text-green-600">*182*8*1*88194#</p>
-                      <p className="text-xs text-gray-600 mt-1">Momo Code: 88194</p>
+                      <p className="text-xs text-gray-600 mt-1">{t('booking.payment.mtn.code')}</p>
                     </div>
                     <p className="text-xs text-green-700 mt-2">
-                      After payment, your booking will be confirmed automatically.
+                      {t('booking.payment.mtn.confirmation')}
                     </p>
                   </div>
                   <Button
@@ -899,7 +901,7 @@ const Booking = () => {
                     className="w-full"
                     variant="default"
                   >
-                    {bookingLoading ? 'Confirming...' : "I've Paid with Mobile Money"}
+                    {bookingLoading ? t('booking.loading.confirming') : t('booking.payment.mtn.button')}
                   </Button>
                 </CardContent>
               </Card>
@@ -961,9 +963,9 @@ const Booking = () => {
       {/* Hero Section */}
       <section className="mt-[116px] pt-32 md:pt-24 pb-16 gradient-soft text-center">
         <div className="container mx-auto max-w-3xl">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">Book V&SKY SPA Kigali</h1>
+          <h1 className="text-5xl md:text-6xl font-bold mb-6">{t('booking.hero.title')}</h1>
           <p className="text-xl text-muted-foreground">
-            Schedule stress relief massages, facials, or couples treatments in minutes.
+            {t('booking.hero.subtitle')}
           </p>
         </div>
       </section>
@@ -980,7 +982,7 @@ const Booking = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <CalendarIcon className="h-5 w-5" />
-                      Select Date
+                      {t('booking.date.title')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -998,7 +1000,7 @@ const Booking = () => {
                       }}
                     />
                     <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm font-medium text-blue-900">Selected Date:</p>
+                      <p className="text-sm font-medium text-blue-900">{t('booking.date.selected')}:</p>
                       <p className="text-lg font-bold text-blue-800">
                         {selectedDate.toLocaleDateString('en-US', {
                           weekday: 'long',
@@ -1018,11 +1020,11 @@ const Booking = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Clock className="h-5 w-5" />
-                      Booked Time Slots
+                      {t('booking.booked.title')}
                     </CardTitle>
                     <div className="flex gap-2 flex-wrap">
-                      <Badge variant="outline" className="bg-gray-100 text-gray-800">Booked</Badge>
-                      <Badge variant="outline" className="bg-red-100 text-red-800">Booked</Badge>
+                      <Badge variant="outline" className="bg-gray-100 text-gray-800">{t('booking.status.booked')}</Badge>
+                      <Badge variant="outline" className="bg-red-100 text-red-800">{t('booking.status.booked')}</Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -1072,7 +1074,7 @@ const Booking = () => {
                             <div className="flex items-center justify-between">
                               <span className="font-medium">{range.startTime} - {range.endTime}</span>
                               <Badge variant="outline" className="text-xs">
-                                BOOKED
+                                {t('booking.status.booked')}
                               </Badge>
                             </div>
                             <p className="text-xs mt-1">{range.service}</p>
@@ -1111,14 +1113,14 @@ const Booking = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Users className="h-5 w-5" />
-                      Booking Details
+                      {t('booking.details.title')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
 
                     {/* Number of People */}
                     <div>
-                      <Label>Number of People</Label>
+                      <Label>{t('booking.people.label')}</Label>
                       <div className="flex items-center gap-2 mt-2">
                         <Button
                           type="button"
@@ -1145,37 +1147,37 @@ const Booking = () => {
                     {/* Client Forms */}
                     {clients.map((client, index) => (
                       <div key={index} className="space-y-4 p-4 border rounded-lg">
-                        <h4 className="font-medium">Person {index + 1}</h4>
+                        <h4 className="font-medium">{t('booking.person.label', { number: index + 1 })}</h4>
 
                         <div>
-                          <Label htmlFor={`name-${index}`}>Full Name *</Label>
+                          <Label htmlFor={`name-${index}`}>{t('booking.name.label')}</Label>
                           <Input
                             id={`name-${index}`}
-                            placeholder="John Doe"
+                            placeholder={t('booking.name.placeholder')}
                             value={client.name}
                             onChange={(e) => handleClientChange(index, 'name', e.target.value)}
                           />
                         </div>
 
                         <div>
-                          <Label htmlFor={`phone-${index}`}>Phone Number *</Label>
+                          <Label htmlFor={`phone-${index}`}>{t('booking.phone.label')}</Label>
                           <Input
                             id={`phone-${index}`}
                             type="tel"
-                            placeholder="+250 788 123 456"
+                            placeholder={t('booking.phone.placeholder')}
                             value={client.phone}
                             onChange={(e) => handleClientChange(index, 'phone', e.target.value)}
                           />
                         </div>
 
                         <div>
-                          <Label htmlFor={`service-${index}`}>Service *</Label>
+                          <Label htmlFor={`service-${index}`}>{t('booking.service.label')}</Label>
                           <Select
                             value={client.service}
                             onValueChange={(value) => handleClientChange(index, 'service', value)}
                           >
                             <SelectTrigger id={`service-${index}`}>
-                              <SelectValue placeholder="Choose a service" />
+                              <SelectValue placeholder={t('booking.service.placeholder')} />
                             </SelectTrigger>
                             <SelectContent>
                               {services.map(service => (
@@ -1186,11 +1188,11 @@ const Booking = () => {
                         </div>
 
                         <div>
-                          <Label htmlFor={`selectedTime-${index}`}>Select Time *</Label>
+                          <Label htmlFor={`selectedTime-${index}`}>{t('booking.time.label')}</Label>
                           {/* Show booked times summary */}
                           {fetchedBookedSlots.length > 0 && (
                             <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                              <p className="text-sm font-medium text-red-800 mb-1">Booked Times Today:</p>
+                              <p className="text-sm font-medium text-red-800 mb-1">{t('booking.booked.today')}:</p>
                               <div className="flex flex-wrap gap-1">
                                 {groupBookedSlotsIntoRanges(fetchedBookedSlots.filter(slot => {
                                   const slotTime = new Date(selectedDate);
@@ -1210,7 +1212,7 @@ const Booking = () => {
                             onValueChange={(value) => handleClientChange(index, 'selectedTime', value)}
                           >
                             <SelectTrigger id={`selectedTime-${index}`}>
-                              <SelectValue placeholder="Choose a time slot" />
+                              <SelectValue placeholder={t('booking.time.placeholder')} />
                             </SelectTrigger>
                             <SelectContent className="max-h-60 overflow-y-auto">
                               {generateTimeSlots().filter(timeSlot => {
@@ -1230,15 +1232,15 @@ const Booking = () => {
                             </SelectContent>
                           </Select>
                           {client.selectedTime && isTimeBlocked(client.selectedTime) && (
-                            <p className="text-sm text-red-600 mt-1">This time is not available. Please choose a different time.</p>
+                            <p className="text-sm text-red-600 mt-1">{t('booking.time.unavailable')}</p>
                           )}
                         </div>
 
                         <div>
-                          <Label htmlFor={`preferredTime-${index}`}>Preferred Time (Optional)</Label>
+                          <Label htmlFor={`preferredTime-${index}`}>{t('booking.preferred.label')}</Label>
                           <Input
                             id={`preferredTime-${index}`}
-                            placeholder="e.g., 2:00 PM, Evening, Morning"
+                            placeholder={t('booking.preferred.placeholder')}
                             value={client.preferredTime}
                             onChange={(e) => handleClientChange(index, 'preferredTime', e.target.value)}
                           />
@@ -1248,10 +1250,10 @@ const Booking = () => {
 
                     {/* Notes */}
                     <div>
-                      <Label htmlFor="notes">Special Requests (Optional)</Label>
+                      <Label htmlFor="notes">{t('booking.notes.label')}</Label>
                       <Textarea
                         id="notes"
-                        placeholder="Any allergies, preferences, or special requirements..."
+                        placeholder={t('booking.notes.placeholder')}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         rows={3}
@@ -1271,7 +1273,7 @@ const Booking = () => {
                       className="w-full"
                       size="lg"
                     >
-                      {bookingLoading ? 'Booking...' : 'Confirm Booking'}
+                      {bookingLoading ? t('booking.loading.booking') : t('booking.confirm.button')}
                     </Button>
 
                   </CardContent>
