@@ -516,6 +516,28 @@ const Admin = () => {
     return groups
   }
 
+  // Function to group approved bookings by unique booking requests (client + service + date + rounded_created_at)
+  const groupApprovedBookingsForOverview = (bookings: Booking[]): Booking[] => {
+    // Group bookings by client, service, date, and rounded creation time to count unique booking requests
+    const groupedBookings = bookings.reduce((acc, booking) => {
+      // Round created_at to the nearest minute to handle slight timestamp differences
+      // between multiple slots created for the same booking request
+      const createdAt = new Date(booking.created_at)
+      const roundedMinute = Math.floor(createdAt.getTime() / (60 * 1000)) * (60 * 1000) // Round to nearest minute
+      const roundedCreatedAt = new Date(roundedMinute).toISOString()
+
+      // Create a unique key for each booking request (client + service + date + rounded_created_at)
+      // This ensures that multiple time slots for the same booking count as one booking
+      const key = `${booking.client_name}-${booking.service}-${booking.date}-${roundedCreatedAt}`
+      if (!acc[key]) {
+        acc[key] = booking
+      }
+      return acc
+    }, {} as Record<string, Booking>)
+
+    return Object.values(groupedBookings)
+  }
+
   // Calculate analytics data
   const calculateAnalytics = () => {
     const allBookings = [...pendingBookings, ...approvedBookings, ...declinedBookings]
@@ -529,48 +551,28 @@ const Admin = () => {
       new Date(booking.created_at) >= periodStart
     )
 
-    // If no real bookings, show demo data for illustration
-    const hasRealData = periodBookings.length > 0
-    let demoBookings = periodBookings
+    // Group bookings by client, service, date, and rounded creation time to count unique booking requests
+    const groupedBookings = periodBookings.reduce((acc, booking) => {
+      // Round created_at to the nearest minute to handle slight timestamp differences
+      // between multiple slots created for the same booking request
+      const createdAt = new Date(booking.created_at)
+      const roundedMinute = Math.floor(createdAt.getTime() / (60 * 1000)) * (60 * 1000) // Round to nearest minute
+      const roundedCreatedAt = new Date(roundedMinute).toISOString()
 
-    if (!hasRealData) {
-      // Generate demo data for the selected period
-      demoBookings = []
-      const demoServices = [
-        "Deep Cleaning for Full Body (60 min)",
-        "Face Cleaning & Moisturizing (60 min)",
-        "Hair Braiding (60 min)",
-        "Professional Styling (30 min)",
-        "Full Body Relax Massage (Oil) (60 min)",
-        "Hot Stone Massage (Oil) (90 min)"
-      ]
-
-      for (let i = 0; i < periodDays; i++) {
-        const date = new Date(now.getTime() - (i * 24 * 60 * 60 * 1000))
-        const numBookings = Math.floor(Math.random() * 5) + 1 // 1-5 bookings per day
-
-        for (let j = 0; j < numBookings; j++) {
-          const service = demoServices[Math.floor(Math.random() * demoServices.length)]
-          const people = Math.floor(Math.random() * 2) + 1 // 1-2 people
-          const status = Math.random() > 0.3 ? 'active' : Math.random() > 0.5 ? 'pending' : 'cancelled'
-
-          demoBookings.push({
-            id: `demo-${i}-${j}`,
-            date: date.toISOString().split('T')[0],
-            time_hour: Math.floor(Math.random() * 10) + 10, // 10 AM - 8 PM
-            time_minute: Math.floor(Math.random() * 4) * 15, // 0, 15, 30, 45 minutes
-            service,
-            people,
-            client_name: `Demo Client ${i}-${j}`,
-            client_phone: '+250 788 123 456',
-            notes: 'Demo booking',
-            status: status as 'pending' | 'active' | 'cancelled',
-            created_at: date.toISOString(),
-            price: 0
-          })
-        }
+      // Create a unique key for each booking request (client + service + date + rounded_created_at)
+      // This ensures that multiple time slots for the same booking count as one booking
+      const key = `${booking.client_name}-${booking.service}-${booking.date}-${roundedCreatedAt}`
+      if (!acc[key]) {
+        acc[key] = booking
       }
-    }
+      return acc
+    }, {} as Record<string, Booking>)
+
+    const uniqueBookings = Object.values(groupedBookings)
+
+    // If no real bookings, show zero data (no demo data)
+    const hasRealData = uniqueBookings.length > 0
+    const demoBookings = hasRealData ? uniqueBookings : []
 
     // Revenue data - group by date
     const revenueByDate = demoBookings.reduce((acc, booking) => {
@@ -661,7 +663,7 @@ const Admin = () => {
 
   // Calculate analytics when bookings or period changes
   useEffect(() => {
-    if (authenticated && (pendingBookings.length > 0 || approvedBookings.length > 0 || declinedBookings.length > 0)) {
+    if (authenticated) {
       calculateAnalytics()
     }
   }, [authenticated, pendingBookings, approvedBookings, declinedBookings, analyticsPeriod])
@@ -1149,7 +1151,7 @@ const Admin = () => {
                         <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total People Approved</p>
                           <p className="text-2xl font-bold text-gray-900">
-                            {approvedBookings.reduce((total, booking) => total + booking.people, 0)}
+                            {groupApprovedBookingsForOverview(approvedBookings).reduce((total, booking) => total + booking.people, 0)}
                           </p>
                         </div>
                       </div>
@@ -1163,7 +1165,7 @@ const Admin = () => {
                         <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total Money Approved</p>
                           <p className="text-2xl font-bold text-gray-900">
-                            {approvedBookings.reduce((total, booking) => {
+                            {groupApprovedBookingsForOverview(approvedBookings).reduce((total, booking) => {
                               const price = servicePrices[booking.service as keyof typeof servicePrices] || '0 RWF'
                               const numericPrice = parseInt(price.replace(/[^\d]/g, '')) || 0
                               return total + (numericPrice * booking.people)
